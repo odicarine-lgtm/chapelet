@@ -14,6 +14,7 @@ import {
   Sparkles,
   Sprout,
   Sun,
+  SunDim,
   Vibrate,
   VibrateOff,
 } from 'lucide-react';
@@ -47,7 +48,10 @@ interface Prefs {
   sound: boolean;
   haptics: boolean;
   theme: 'light' | 'dark';
+  wakeLock: boolean; // garder l'écran allumé pendant la prière
 }
+
+const wakeLockSupported = typeof navigator !== 'undefined' && 'wakeLock' in navigator;
 
 const STEPS = 12;
 const DECADES = 5;
@@ -69,6 +73,7 @@ export default function App() {
     sound: true,
     haptics: true,
     theme: window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+    wakeLock: true,
   }));
   const [session, setSession] = useLocalStorage<Session>('chapelet.session', () => ({
     ...freshSession(getSetForDate().id),
@@ -90,6 +95,38 @@ export default function App() {
   const intention = intentions.find((i) => i.id === session.intentionId);
   const streak = currentStreak(stats.activeDays);
   const anyModal = pickerOpen || journalOpen || confirmReset || transition || session.phase === 'done';
+
+  // Écran toujours allumé pendant la prière (Screen Wake Lock, Safari iOS 16.4+).
+  // Le verrou est relâché par le système quand l'app passe en arrière-plan : on le redemande au retour.
+  useEffect(() => {
+    if (!wakeLockSupported || !prefs.wakeLock || session.phase !== 'praying') return;
+    let lock: WakeLockSentinel | null = null;
+    let disposed = false;
+    const acquire = async () => {
+      if (lock || document.visibilityState !== 'visible') return;
+      try {
+        const l = await navigator.wakeLock.request('screen');
+        if (disposed) return void l.release();
+        lock = l;
+        l.addEventListener('release', () => {
+          if (lock === l) lock = null;
+        });
+      } catch {
+        /* refusé (économie d'énergie, etc.) */
+      }
+    };
+    void acquire();
+    const onVisible = () => void acquire();
+    document.addEventListener('visibilitychange', onVisible);
+    // Certains navigateurs n'accordent le verrou qu'après une interaction : on réessaie à chaque toucher.
+    document.addEventListener('pointerdown', onVisible);
+    return () => {
+      disposed = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      document.removeEventListener('pointerdown', onVisible);
+      void lock?.release();
+    };
+  }, [prefs.wakeLock, session.phase]);
 
   // Thème
   useEffect(() => {
@@ -499,7 +536,18 @@ export default function App() {
                 <div className="mt-5 hidden lg:block">{controls}</div>
                 <div className="mt-4 flex items-center justify-between text-xs text-night/50 dark:text-ivory/50">
                   <span className="hidden sm:inline">← → ou Espace · glissez sur mobile</span>
-                  <span className="sm:hidden">Glissez ← → pour avancer</span>
+                  <span className="sm:hidden">Glissez ← →</span>
+                  {wakeLockSupported && (
+                    <button
+                      className={`btn text-xs ${prefs.wakeLock ? 'text-gold-deep dark:text-gold-light' : 'text-night/60 dark:text-ivory/60'}`}
+                      onClick={() => setPrefs({ ...prefs, wakeLock: !prefs.wakeLock })}
+                      aria-pressed={prefs.wakeLock}
+                      title="Empêche l'écran de se mettre en veille pendant la prière"
+                    >
+                      {prefs.wakeLock ? <Sun size={14} aria-hidden="true" /> : <SunDim size={14} aria-hidden="true" />}
+                      Écran {prefs.wakeLock ? 'allumé' : 'auto'}
+                    </button>
+                  )}
                   <button className="btn -mr-3 text-xs text-night/60 hover:text-cardinal dark:text-ivory/60" onClick={() => setConfirmReset(true)}>
                     <RotateCcw size={14} aria-hidden="true" /> Recommencer
                   </button>
