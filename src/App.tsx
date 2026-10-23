@@ -5,6 +5,7 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   Cross,
   Heart,
   Moon,
@@ -19,7 +20,25 @@ import {
   VibrateOff,
 } from 'lucide-react';
 import { ORDINALS, getSet, getSetForDate, type MysterySetId } from './data/mysteries';
-import { PRAYERS, prayersForStep, type Lang } from './data/prayers';
+import { PRAYERS, type Lang, type PrayerId } from './data/prayers';
+import {
+  DECADES,
+  INTRO,
+  MERCY,
+  OUTRO,
+  beadAt,
+  centerLabelAt,
+  counterAt,
+  firstPosition,
+  nextPosition,
+  prayersAt,
+  prevPosition,
+  progressOf,
+  segmentLabel,
+  stepsIn,
+  type DevotionId,
+  type Position,
+} from './data/devotions';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { ringBell } from './lib/bell';
 import { vibrate, type HapticKind } from './lib/haptics';
@@ -35,9 +54,10 @@ import { Modal } from './components/Modal';
 type Phase = 'idle' | 'praying' | 'done';
 
 interface Session {
-  setId: MysterySetId;
-  decade: number; // 0-4
-  step: number; // 0 = Pater, 1-10 = Ave, 11 = Gloria + Fatima
+  devotion: DevotionId;
+  setId: MysterySetId; // série de mystères (Rosaire uniquement)
+  decade: number; // 0-4 ; -1 = ouverture ; 5 = conclusion (voir data/devotions)
+  step: number;
   phase: Phase;
   counted: number[]; // dizaines déjà comptabilisées dans les statistiques
   intentionId: string | null;
@@ -53,13 +73,10 @@ interface Prefs {
 
 const wakeLockSupported = typeof navigator !== 'undefined' && 'wakeLock' in navigator;
 
-const STEPS = 12;
-const DECADES = 5;
-
-const freshSession = (setId: MysterySetId, intentionId: string | null = null): Session => ({
+const freshSession = (devotion: DevotionId, setId: MysterySetId, intentionId: string | null = null): Session => ({
+  devotion,
   setId,
-  decade: 0,
-  step: 0,
+  ...firstPosition(devotion),
   phase: 'praying',
   counted: [],
   intentionId,
@@ -76,7 +93,7 @@ export default function App() {
     wakeLock: true,
   }));
   const [session, setSession] = useLocalStorage<Session>('chapelet.session', () => ({
-    ...freshSession(getSetForDate().id),
+    ...freshSession('rosaire', getSetForDate().id),
     phase: 'idle',
   }));
   const [stats, setStats] = useLocalStorage<Stats>('chapelet.stats', EMPTY_STATS);
@@ -90,7 +107,16 @@ export default function App() {
   const [tts, setTts] = useState(false);
 
   const set = getSet(session.setId);
-  const mystery = set.mysteries[session.decade];
+  const dev = session.devotion;
+  const isMercy = dev === 'misericorde';
+  const pos: Position = { decade: session.decade, step: session.step };
+  const inDecade = session.decade >= 0 && session.decade < DECADES;
+  const mystery = set.mysteries[Math.min(Math.max(session.decade, 0), DECADES - 1)];
+  const devotionName = isMercy ? MERCY.name : set.name;
+  const devotionLatin = isMercy ? MERCY.latin : set.latin;
+  const now = new Date();
+  const mercyHour = now.getHours() === 15;
+  const mercyHighlight = mercyHour || now.getDay() === 5;
   const todaySet = getSetForDate();
   const intention = intentions.find((i) => i.id === session.intentionId);
   const streak = currentStreak(stats.activeDays);
@@ -153,66 +179,73 @@ export default function App() {
       activeDays: withActiveToday(st.activeDays),
       history: [
         ...st.history,
-        { id: uid(), date: new Date().toISOString(), setId: s.setId, intention: intentions.find((i) => i.id === s.intentionId)?.text },
+        { id: uid(), date: new Date().toISOString(), setId: s.setId, devotion: s.devotion, intention: intentions.find((i) => i.id === s.intentionId)?.text },
       ].slice(-500),
     }));
+
+  // Grains « forts » : Gloria du Rosaire, Père Éternel et Dieu Saint de la Miséricorde
+  const strongBead = (d: DevotionId, p: Position) =>
+    d === 'rosaire' ? p.step === 11 : p.decade === OUTRO || (p.decade >= 0 && p.decade < DECADES && p.step === 0);
 
   const next = () => {
     const s = session;
     if (s.phase !== 'praying') return;
-    if (s.step < STEPS - 1) {
-      const step = s.step + 1;
-      feedback(step === STEPS - 1 ? 'gloria' : 'bead');
-      setSession({ ...s, step });
-      return;
+    const p = { decade: s.decade, step: s.step };
+    const n = nextPosition(s.devotion, p);
+    const endOfDecade = n?.decade !== p.decade && p.decade >= 0 && p.decade < DECADES;
+    let counted = s.counted;
+    if (endOfDecade && !counted.includes(p.decade)) {
+      counted = [...counted, p.decade];
+      recordDecade();
     }
-    // Fin de dizaine
-    const firstTime = !s.counted.includes(s.decade);
-    const counted = firstTime ? [...s.counted, s.decade] : s.counted;
-    if (firstTime) recordDecade();
-    if (s.decade < DECADES - 1) {
-      feedback('decade');
-      setSession({ ...s, decade: s.decade + 1, step: 0, counted });
-      setShowMeditation(false);
-      setTransition(true);
-    } else {
+    if (!n) {
       feedback('complete');
       setSession({ ...s, phase: 'done', counted });
       recordRosary(s);
+      return;
     }
+    if (n.decade !== p.decade) {
+      feedback('decade');
+      setShowMeditation(false);
+      // Méditation du mystère avant chaque dizaine du Rosaire
+      if (s.devotion === 'rosaire') setTransition(true);
+    } else feedback(strongBead(s.devotion, n) ? 'gloria' : 'bead');
+    setSession({ ...s, ...n, counted });
   };
 
   const prev = () => {
     const s = session;
     if (s.phase !== 'praying') return;
-    if (s.step > 0) setSession({ ...s, step: s.step - 1 });
-    else if (s.decade > 0) setSession({ ...s, decade: s.decade - 1, step: STEPS - 1 });
-    else return;
+    const p = prevPosition(s.devotion, { decade: s.decade, step: s.step });
+    if (!p) return;
+    setSession({ ...s, ...p });
     feedback('bead');
   };
 
-  const selectStep = (step: number) => {
-    if (session.phase !== 'praying') return;
-    setSession({ ...session, step });
-    feedback(step === STEPS - 1 ? 'gloria' : 'bead');
+  // Clic sur un grain du dessin (dans la dizaine en cours uniquement)
+  const selectBead = (bead: number) => {
+    if (session.phase !== 'praying' || !inDecade || bead >= stepsIn(dev, session.decade)) return;
+    setSession({ ...session, step: bead });
+    feedback(strongBead(dev, { decade: session.decade, step: bead }) ? 'gloria' : 'bead');
   };
 
   const jumpToDecade = (decade: number) => {
     setSession({ ...session, decade, step: 0, phase: 'praying' });
     setShowMeditation(false);
-    setTransition(true);
+    if (dev === 'rosaire') setTransition(true);
   };
 
-  const startSet = (id: MysterySetId) => {
-    setSession(freshSession(id, session.intentionId));
+  const startDevotion = (devotion: DevotionId, setId: MysterySetId = session.setId) => {
+    setSession(freshSession(devotion, setId, session.intentionId));
     setPickerOpen(false);
     setShowMeditation(false);
     setTransition(true);
     if (prefs.sound) ringBell('decade');
   };
+  const startSet = (id: MysterySetId) => startDevotion('rosaire', id);
 
   const restart = () => {
-    setSession(freshSession(session.setId, session.intentionId));
+    setSession(freshSession(session.devotion, session.setId, session.intentionId));
     setConfirmReset(false);
     setShowMeditation(false);
     setTransition(true);
@@ -256,16 +289,22 @@ export default function App() {
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4) (dx < 0 ? next : prev)();
   };
 
+  const closingPrayers: PrayerId[] = isMercy ? MERCY.closing : ['salve', 'benediction'];
+
   // Récitation vocale : lit le grain courant puis avance automatiquement.
   const speech = useMemo(() => {
     const L = prefs.lang;
-    if (session.phase === 'done') return `${PRAYERS.salve.text[L]} ${PRAYERS.benediction.text[L]}`;
-    if (transition) return `${ORDINALS[session.decade].replace('ᵉʳ', 'er').replace('ᵉ', 'e')} mystère. ${mystery.title}. ${mystery.meditation}`;
-    return prayersForStep(session.step)
+    if (session.phase === 'done') return closingPrayers.map((id) => PRAYERS[id].text[L]).join(' ');
+    if (transition) {
+      if (isMercy) return `${MERCY.name}. ${MERCY.intro}`;
+      return `${ORDINALS[session.decade].replace('ᵉʳ', 'er').replace('ᵉ', 'e')} mystère. ${mystery.title}. ${mystery.meditation}`;
+    }
+    return prayersAt(dev, { decade: session.decade, step: session.step })
       .map((id) => PRAYERS[id].text[L])
       .join(' ');
-  }, [prefs.lang, session.phase, session.step, session.decade, transition, mystery]);
-  const speechKey = `${session.setId}-${session.decade}-${session.step}-${session.phase}-${transition}-${prefs.lang}`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs.lang, session.phase, session.step, session.decade, dev, transition, mystery]);
+  const speechKey = `${dev}-${session.setId}-${session.decade}-${session.step}-${session.phase}-${transition}-${prefs.lang}`;
 
   const onSpeechEnd = useRef<() => void>(() => {});
   onSpeechEnd.current = () => {
@@ -287,17 +326,32 @@ export default function App() {
   }, [tts, speechKey]);
   useEffect(() => () => stopSpeaking(), []);
 
-  const progress = session.phase === 'done' ? 100 : ((session.decade * STEPS + session.step) / (DECADES * STEPS)) * 100;
-  const stepLabel =
-    session.step === 0
-      ? PRAYERS.pater.title[prefs.lang]
-      : session.step === STEPS - 1
-        ? `${PRAYERS.gloria.title[prefs.lang]} · ${PRAYERS.fatima.title[prefs.lang]}`
-        : PRAYERS.ave.title[prefs.lang];
+  const prog = progressOf(dev, pos);
+  const progress = session.phase === 'done' ? 100 : (prog.index / prog.total) * 100;
+  const prayers = prayersAt(dev, pos);
+  const stepLabel = prayers.map((id) => PRAYERS[id].title[prefs.lang]).join(' · ');
+  const counter = counterAt(dev, pos);
+  const nextPos = nextPosition(dev, pos);
+  const nextLabel = !nextPos
+    ? 'Terminer le chapelet'
+    : nextPos.decade === session.decade
+      ? 'Grain suivant'
+      : nextPos.decade === OUTRO
+        ? 'Conclusion'
+        : session.decade === INTRO
+          ? 'Première dizaine'
+          : 'Dizaine suivante';
+
+  // Libellé accessible de chaque grain du dessin
+  const beadLabel = (bead: number) => {
+    if (bead === 11) return isMercy ? 'Médaille' : 'Gloire au Père et prière de Fatima';
+    if (isMercy) return bead === 0 ? 'Père Éternel' : `Par sa douloureuse Passion ${bead} sur 10`;
+    return bead === 0 ? 'Notre Père' : `Je vous salue Marie ${bead} sur 10`;
+  };
 
   const controls = (
 <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 sm:gap-3">
-    <button className="btn-ghost h-14 w-14 rounded-full px-0" onClick={prev} aria-label="Grain précédent" title="Grain précédent (←)" disabled={session.decade === 0 && session.step === 0}>
+    <button className="btn-ghost h-14 w-14 rounded-full px-0" onClick={prev} aria-label="Grain précédent" title="Grain précédent (←)" disabled={!prevPosition(dev, pos)}>
       <ChevronLeft size={24} aria-hidden="true" />
     </button>
     {ttsSupported ? (
@@ -314,7 +368,7 @@ export default function App() {
       <span />
     )}
     <button className="btn-gold h-14 text-base" onClick={next} title="Grain suivant (→ ou Espace)">
-      {session.step === STEPS - 1 ? (session.decade === DECADES - 1 ? 'Terminer le chapelet' : 'Dizaine suivante') : 'Grain suivant'}
+      {nextLabel}
       <ChevronRight size={22} aria-hidden="true" />
     </button>
   </div>
@@ -408,10 +462,49 @@ export default function App() {
               </p>
             )}
           </section>
-        ) : (
+        ) : null}
+
+        {session.phase === 'idle' && (
+          <section
+            className={`card mx-auto mt-4 flex max-w-2xl animate-rise flex-col items-center gap-4 p-6 text-center sm:flex-row sm:text-left ${mercyHighlight ? 'border-gold shadow-md shadow-gold/20' : ''}`}
+          >
+            <div className="flex-1">
+              {mercyHighlight && (
+                <p className="eyebrow mb-1 inline-flex items-center gap-1">
+                  <Clock3 size={12} aria-hidden="true" /> {mercyHour ? 'C’est l’Heure de la Miséricorde' : 'Vendredi, jour de la Passion'}
+                </p>
+              )}
+              <h2 className="font-serif text-2xl font-semibold">{MERCY.name}</h2>
+              <p className="text-sm text-night/70 dark:text-ivory/70">Environ 10 minutes · {MERCY.when}</p>
+            </div>
+            <button className={mercyHighlight ? 'btn-gold text-base' : 'btn-ghost text-base'} onClick={() => startDevotion('misericorde')}>
+              <Play size={18} aria-hidden="true" /> Prier ce chapelet
+            </button>
+          </section>
+        )}
+
+        {session.phase !== 'idle' && (
           <div className="animate-rise space-y-4">
             {/* Mystère courant */}
             <section className="card p-5 sm:p-6" aria-labelledby="mystere">
+              {isMercy ? (
+                <div>
+                  <p className="eyebrow">
+                    {MERCY.name} · {segmentLabel(session.decade)}
+                  </p>
+                  <h2 id="mystere" className="mt-1 font-serif text-3xl font-semibold leading-tight">
+                    {session.decade === INTRO ? 'Prières d’ouverture' : session.decade === OUTRO ? 'Dieu Saint, Dieu Fort, Dieu Immortel' : `${['1ʳᵉ', '2ᵉ', '3ᵉ', '4ᵉ', '5ᵉ'][session.decade]} dizaine`}
+                  </h2>
+                  <p className="mt-1 text-sm text-night/70 dark:text-ivory/70">
+                    {session.decade === INTRO
+                      ? 'Sur la croix et les premiers grains du chapelet.'
+                      : session.decade === OUTRO
+                        ? 'Trois fois, sur la médaille.'
+                        : 'Unis à la Passion du Christ, pour nous et pour le monde entier.'}
+                  </p>
+                </div>
+              ) : (
+              <>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="eyebrow">
@@ -434,20 +527,23 @@ export default function App() {
                 </button>
               </div>
               {showMeditation && <p className="mt-3 font-serif text-lg italic leading-relaxed">{mystery.meditation}</p>}
+              </>
+              )}
 
               {/* Pilules D1…D5 */}
-              <nav className="mt-4 flex gap-2" aria-label="Dizaines">
-                {Array.from({ length: DECADES }, (_, d) => {
+              <nav className={`mt-4 flex ${isMercy ? 'gap-1.5' : 'gap-2'}`} aria-label="Dizaines">
+                {(isMercy ? [INTRO, 0, 1, 2, 3, 4, OUTRO] : [0, 1, 2, 3, 4]).map((d) => {
                   const current = d === session.decade;
-                  const done = session.counted.includes(d);
+                  const done = session.counted.includes(d) || (d === INTRO && session.decade > INTRO);
+                  const name = isMercy ? segmentLabel(d) : `Dizaine ${d + 1} : ${set.mysteries[d].title}`;
                   return (
                     <button
                       key={d}
                       onClick={() => jumpToDecade(d)}
                       aria-current={current ? 'step' : undefined}
-                      aria-label={`Dizaine ${d + 1} : ${set.mysteries[d].title}${done ? ' (récitée)' : ''}`}
-                      title={set.mysteries[d].title}
-                      className={`min-h-11 flex-1 rounded-full border text-sm font-semibold transition ${
+                      aria-label={`${name}${done ? ' (récitée)' : ''}`}
+                      title={isMercy ? segmentLabel(d) : set.mysteries[d].title}
+                      className={`min-h-11 min-w-0 flex-1 rounded-full border text-sm font-semibold transition ${
                         current
                           ? 'border-gold bg-gold text-night shadow-md shadow-gold/30'
                           : done
@@ -455,7 +551,7 @@ export default function App() {
                             : 'border-gold/30 text-night/70 hover:bg-gold/10 dark:text-ivory/70'
                       }`}
                     >
-                      D{d + 1}
+                      {d === INTRO ? 'Ouv.' : d === OUTRO ? 'Fin' : `D${d + 1}`}
                     </button>
                   );
                 })}
@@ -465,7 +561,15 @@ export default function App() {
             <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
               {/* Chapelet visuel */}
               <section className="card flex items-center justify-center p-4" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-                <RosaryBeads step={session.step} decade={session.decade} active={session.phase === 'praying'} onSelect={selectStep} />
+                <RosaryBeads
+                  activeBead={session.phase === 'praying' ? beadAt(dev, pos) : null}
+                  allDone={session.decade === OUTRO}
+                  center={centerLabelAt(dev, pos)}
+                  sub={segmentLabel(session.decade)}
+                  label={beadLabel}
+                  medalSelectable={!isMercy}
+                  onSelect={selectBead}
+                />
               </section>
 
               {/* Prière courante */}
@@ -478,26 +582,26 @@ export default function App() {
                   <h3 id="priere" className="font-serif text-2xl font-semibold text-gold-deep dark:text-gold">
                     {stepLabel}
                   </h3>
-                  {session.step >= 1 && session.step <= 10 && (
-                    <span className="shrink-0 font-serif text-3xl font-semibold tabular-nums" aria-label={`${session.step} sur 10`}>
-                      {session.step}
-                      <span className="text-lg text-night/50 dark:text-ivory/50">/10</span>
+                  {counter && (
+                    <span className="shrink-0 font-serif text-3xl font-semibold tabular-nums" aria-label={`${counter.n} sur ${counter.of}`}>
+                      {counter.n}
+                      <span className="text-lg text-night/50 dark:text-ivory/50">/{counter.of}</span>
                     </span>
                   )}
                 </div>
 
-                {session.step >= 1 && session.step <= 10 && (
+                {counter && (
                   <div className="mt-2 flex gap-1.5" aria-hidden="true">
-                    {Array.from({ length: 10 }, (_, i) => (
-                      <span key={i} className={`h-1.5 flex-1 rounded-full ${i < session.step ? 'bg-gold' : 'bg-gold/15'}`} />
+                    {Array.from({ length: counter.of }, (_, i) => (
+                      <span key={i} className={`h-1.5 flex-1 rounded-full ${i < counter.n ? 'bg-gold' : 'bg-gold/15'}`} />
                     ))}
                   </div>
                 )}
 
-                <div key={`${session.decade}-${session.step}-${prefs.lang}`} className="mt-4 flex-1 animate-rise space-y-4" lang={prefs.lang}>
-                  {prayersForStep(session.step).map((id) => (
+                <div key={`${dev}-${session.decade}-${session.step}-${prefs.lang}`} className="mt-4 flex-1 animate-rise space-y-4" lang={prefs.lang}>
+                  {prayers.map((id) => (
                     <div key={id}>
-                      {session.step === STEPS - 1 && <p className="eyebrow mb-1">{PRAYERS[id].title[prefs.lang]}</p>}
+                      {prayers.length > 1 && <p className="eyebrow mb-1">{PRAYERS[id].title[prefs.lang]}</p>}
                       <p className="font-serif text-xl leading-relaxed sm:text-[1.4rem]">{PRAYERS[id].text[prefs.lang]}</p>
                     </div>
                   ))}
@@ -565,16 +669,45 @@ export default function App() {
       )}
 
       <footer className="mt-8 text-center font-serif text-sm italic text-night/50 dark:text-ivory/50">
-        « Le Rosaire est la prière la plus belle et la plus riche en grâces. » — saint Pie X
+        {isMercy && session.phase !== 'idle' ? MERCY.quote : '« Le Rosaire est la prière la plus belle et la plus riche en grâces. » — saint Pie X'}
       </footer>
 
-      <MysteryPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={startSet} currentId={session.phase !== 'idle' ? session.setId : undefined} />
+      <MysteryPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={startSet}
+        onPickMercy={() => startDevotion('misericorde')}
+        currentId={session.phase === 'idle' ? undefined : isMercy ? 'misericorde' : session.setId}
+      />
 
-      <TransitionModal open={transition && session.phase === 'praying'} set={set} decade={session.decade} onContinue={() => setTransition(false)} />
+      <TransitionModal
+        open={transition && session.phase === 'praying'}
+        onContinue={() => setTransition(false)}
+        {...(isMercy
+          ? {
+              eyebrow: 'Petit Journal de sainte Faustine',
+              title: MERCY.name,
+              body: MERCY.intro,
+              facts: [
+                { icon: <Clock3 size={15} />, label: 'Heure', value: '15 h, Heure de la Miséricorde' },
+                { icon: <BookOpen size={15} />, label: 'Source', value: 'Petit Journal, n° 474-476' },
+              ],
+              button: 'Commencer le chapelet',
+            }
+          : {
+              eyebrow: `${set.name} · ${ORDINALS[session.decade]} mystère`,
+              title: mystery.title,
+              body: mystery.meditation,
+              facts: [
+                { icon: <Sprout size={15} />, label: 'Fruit du mystère', value: mystery.fruit },
+                { icon: <BookOpen size={15} />, label: 'Écriture', value: mystery.reference },
+              ],
+              button: `Commencer la dizaine ${session.decade + 1}`,
+            })}
+      />
 
       <CompletionScreen
         open={session.phase === 'done'}
-        set={set}
+        name={devotionName}
+        latin={devotionLatin}
+        closing={closingPrayers}
         lang={prefs.lang}
         streak={streak}
         total={stats.totalRosaries}
@@ -612,7 +745,7 @@ export default function App() {
 
       <Modal open={confirmReset} onClose={() => setConfirmReset(false)} title="Recommencer le chapelet ?">
         <p className="text-sm text-night/80 dark:text-ivory/80">
-          La progression actuelle ({set.name}, dizaine {session.decade + 1}) sera remise au début. Les dizaines déjà récitées restent comptées dans votre journal.
+          La progression actuelle ({devotionName}, {segmentLabel(session.decade).toLowerCase()}) sera remise au début. Les dizaines déjà récitées restent comptées dans votre journal.
         </p>
         <div className="mt-6 grid grid-cols-2 gap-3">
           <button className="btn-ghost" onClick={() => setConfirmReset(false)} data-autofocus>

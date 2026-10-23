@@ -1,9 +1,11 @@
 import type { MysterySetId } from '../data/mysteries';
+import type { DevotionId } from '../data/devotions';
 
 export interface HistoryEntry {
   id: string;
   date: string; // ISO
   setId: MysterySetId;
+  devotion?: DevotionId; // absent = rosaire (entrées antérieures)
   intention?: string;
 }
 

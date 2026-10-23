@@ -1,4 +1,5 @@
-import { CalendarHeart, Play } from 'lucide-react';
+import { CalendarHeart, Clock3, Play } from 'lucide-react';
+import { MERCY } from '../data/devotions';
 import { MYSTERY_SETS, getSetForDate, type MysterySetId } from '../data/mysteries';
 import { Modal } from './Modal';
 
@@ -6,7 +7,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onPick: (id: MysterySetId) => void;
-  currentId?: MysterySetId;
+  onPickMercy: () => void;
+  currentId?: MysterySetId | 'misericorde';
 }
 
 const ACCENT: Record<MysterySetId, string> = {
@@ -16,11 +18,12 @@ const ACCENT: Record<MysterySetId, string> = {
   glorieux: 'from-yellow-100 to-ivory dark:from-gold/25 dark:to-night-800',
 };
 
-export function MysteryPicker({ open, onClose, onPick, currentId }: Props) {
+export function MysteryPicker({ open, onClose, onPick, onPickMercy, currentId }: Props) {
   const today = getSetForDate();
   const sets = [today, ...MYSTERY_SETS.filter((s) => s.id !== today.id)];
   return (
     <Modal open={open} onClose={onClose} title="Démarrer un Mystère" wide>
+      <h3 className="eyebrow mb-3">Saint Rosaire</h3>
       <div className="grid gap-4 sm:grid-cols-2">
         {sets.map((s, idx) => (
           <button
@@ -52,6 +55,24 @@ export function MysteryPicker({ open, onClose, onPick, currentId }: Props) {
           </button>
         ))}
       </div>
+
+      <h3 className="eyebrow mb-3 mt-6">Autres chapelets</h3>
+      <button
+        onClick={onPickMercy}
+        className="group relative flex w-full flex-col overflow-hidden rounded-2xl border border-gold/25 bg-gradient-to-br from-rose-100/70 via-ivory to-sky-100/70 p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg dark:from-cardinal/30 dark:via-night-800 dark:to-sky-900/40"
+      >
+        <span className="font-serif text-2xl font-semibold">{MERCY.name}</span>
+        <span className="font-serif text-sm italic text-night/60 dark:text-ivory/60">{MERCY.latin}</span>
+        <span className="eyebrow mt-1 inline-flex items-center gap-1">
+          <Clock3 size={12} aria-hidden="true" /> {MERCY.when}
+        </span>
+        <span className="mt-3 text-sm text-night/80 dark:text-ivory/80">
+          Ouverture (signe de croix, Notre Père, Je vous salue Marie, Credo) · 5 dizaines « Père Éternel » / « Par sa douloureuse Passion » · « Dieu Saint » × 3
+        </span>
+        <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-gold-deep group-hover:underline dark:text-gold">
+          <Play size={14} aria-hidden="true" /> {currentId === 'misericorde' ? 'Recommencer' : 'Commencer'}
+        </span>
+      </button>
     </Modal>
   );
 }

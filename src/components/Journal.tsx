@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { CalendarDays, Check, Flame, Heart, Layers, Plus, Trash2, Trophy } from 'lucide-react';
 import { getSet } from '../data/mysteries';
+import { MERCY } from '../data/devotions';
 import { bestStreak, currentStreak, dayKey, type Stats } from '../lib/stats';
 import { Modal } from './Modal';
 
@@ -170,7 +171,7 @@ export function Journal(props: Props) {
             <ul className="divide-y divide-gold/15">
               {[...stats.history].reverse().slice(0, 60).map((h) => (
                 <li key={h.id} className="py-3">
-                  <p className="font-serif text-lg font-semibold">{getSet(h.setId).name}</p>
+                  <p className="font-serif text-lg font-semibold">{h.devotion === 'misericorde' ? MERCY.name : getSet(h.setId).name}</p>
                   <p className="text-xs capitalize text-night/60 dark:text-ivory/60">{fmt.format(new Date(h.date))}</p>
                   {h.intention && <p className="mt-1 text-sm italic">Intention : {h.intention}</p>}
                 </li>

@@ -1,10 +1,16 @@
 import type { KeyboardEvent } from 'react';
 
 interface Props {
-  step: number; // 0 = Pater, 1-10 = Ave, 11 = Gloria (médaille)
-  decade: number;
-  active: boolean;
-  onSelect: (step: number) => void;
+  /** Grain courant : -1 croix, 0 gros grain, 1-10 petits grains, 11 médaille ; null hors prière. */
+  activeBead: number | null;
+  /** Tous les grains de la boucle sont récités (conclusion). */
+  allDone?: boolean;
+  center: string;
+  sub: string;
+  label: (bead: number) => string;
+  /** La médaille correspond-elle à un grain cliquable dans la dizaine (Gloria du Rosaire) ? */
+  medalSelectable: boolean;
+  onSelect: (bead: number) => void;
 }
 
 const CX = 150;
@@ -16,14 +22,10 @@ const at = (a: number) => [CX + R * Math.cos(rad(a)), CY + R * Math.sin(rad(a))]
 // Médaille en bas (90°), Pater juste à gauche, puis les dix Ave dans le sens horaire.
 const ANGLES = [120, ...Array.from({ length: 10 }, (_, i) => 150 + (i * (414 - 150)) / 9)];
 
-function label(i: number) {
-  if (i === 0) return 'Notre Père';
-  if (i === 11) return 'Gloire au Père et prière de Fatima';
-  return `Je vous salue Marie ${i} sur 10`;
-}
-
-export function RosaryBeads({ step, decade, active, onSelect }: Props) {
-  const state = (i: number) => (!active ? 'pending' : i < step ? 'done' : i === step ? 'active' : 'pending');
+export function RosaryBeads({ activeBead, allDone, center, sub, label, medalSelectable, onSelect }: Props) {
+  const active = activeBead !== null;
+  const state = (i: number) =>
+    i === activeBead ? 'active' : allDone || (activeBead !== null && activeBead >= 0 && i < activeBead) ? 'done' : 'pending';
   const keySelect = (i: number) => (e: KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -74,10 +76,10 @@ export function RosaryBeads({ step, decade, active, onSelect }: Props) {
 
   const [mx, my] = at(90);
   const medalState = state(11);
-  const center = !active ? 'Ave' : step === 0 ? 'Pater' : step === 11 ? 'Gloria' : `${step}/10`;
+  const crossActive = activeBead === -1;
 
   return (
-    <svg viewBox="0 0 300 335" className="mx-auto h-auto w-full max-w-[280px] sm:max-w-[340px]" role="group" aria-label={`Chapelet, dizaine ${decade + 1} sur 5`}>
+    <svg viewBox="0 0 300 335" className="mx-auto h-auto w-full max-w-[280px] sm:max-w-[340px]" role="group" aria-label={`Chapelet — ${sub}`}>
       <defs>
         <radialGradient id="gold" cx="35%" cy="30%" r="75%">
           <stop offset="0" stopColor="#FBF0C4" />
@@ -98,24 +100,24 @@ export function RosaryBeads({ step, decade, active, onSelect }: Props) {
       <line x1={CX} y1={my + 12} x2={CX} y2={262} className="stroke-gold-deep/50 dark:stroke-gold/45" strokeWidth={1.4} strokeDasharray="2 3" />
 
       {/* Centre */}
-      <text x={CX} y={CY - 6} textAnchor="middle" className="fill-gold-deep font-serif text-[30px] font-semibold dark:fill-gold" aria-hidden="true">
+      <text x={CX} y={CY - 6} textAnchor="middle" className={`fill-gold-deep font-serif font-semibold dark:fill-gold ${center.length > 6 ? 'text-[24px]' : 'text-[30px]'}`} aria-hidden="true">
         {center}
       </text>
       <text x={CX} y={CY + 20} textAnchor="middle" className="fill-night/60 text-[11px] uppercase tracking-[.2em] dark:fill-ivory/60" aria-hidden="true">
-        Dizaine {decade + 1}/5
+        {sub}
       </text>
 
       {ANGLES.map((_, i) => bead(i))}
 
       {/* Médaille : grain du Gloire au Père */}
       <g
-        role="button"
-        tabIndex={active ? 0 : -1}
+        role={medalSelectable ? 'button' : undefined}
+        tabIndex={medalSelectable && active ? 0 : -1}
         aria-label={label(11)}
         aria-current={medalState === 'active' ? 'step' : undefined}
-        className="cursor-pointer outline-none"
-        onClick={() => onSelect(11)}
-        onKeyDown={keySelect(11)}
+        className={medalSelectable ? 'cursor-pointer outline-none' : 'outline-none'}
+        onClick={medalSelectable ? () => onSelect(11) : undefined}
+        onKeyDown={medalSelectable ? keySelect(11) : undefined}
       >
         {medalState === 'active' && (
           <ellipse cx={mx} cy={my} rx={22} ry={26} className="animate-halo fill-gold/40" style={{ transformOrigin: `${mx}px ${my}px` }} />
@@ -134,7 +136,9 @@ export function RosaryBeads({ step, decade, active, onSelect }: Props) {
 
       {/* Croix */}
       <g aria-hidden="true">
+        {crossActive && <ellipse cx={150} cy={292} rx={30} ry={38} className="animate-halo fill-gold/35" style={{ transformOrigin: '150px 292px' }} />}
         <path
+          filter={crossActive ? 'url(#glow)' : undefined}
           d="M146 262 h8 v18 h16 v8 h-16 v34 h-8 v-34 h-16 v-8 h16 z"
           fill="url(#gold)"
           className="stroke-gold-deep/60"

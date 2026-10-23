@@ -1,6 +1,6 @@
 # Chapelet — Rosaire médité (PWA)
 
-Application de prière du chapelet, grain par grain, en français ou en latin. 100 % hors-ligne, sans publicité, sans compte.
+Application de prière du chapelet, grain par grain, en français ou en latin : **Saint Rosaire** (4 séries de mystères) et **Chapelet de la Divine Miséricorde**. 100 % hors-ligne, sans publicité, sans compte.
 
 ## Lancer
 
@@ -17,7 +17,8 @@ Le dossier `dist/` se déploie tel quel sur n'importe quel hébergement statique
 
 | Fichier | Rôle |
 |---|---|
-| `src/data/prayers.ts` | Textes FR/LA : Pater, Ave, Gloria, Fatima, Salve Regina, bénédiction |
+| `src/data/prayers.ts` | Textes FR/LA : Pater, Ave, Gloria, Fatima, Salve Regina, bénédiction, Credo et prières de la Divine Miséricorde |
+| `src/data/devotions.ts` | Structure de chaque chapelet (ouverture, dizaines, conclusion) et navigation grain par grain |
 | `src/data/mysteries.ts` | 4 séries × 5 mystères : fruit, référence biblique, méditation, jours recommandés |
 | `src/App.tsx` | Logique de progression (5 dizaines × 12 grains), clavier, swipe, TTS, statistiques |
 | `src/components/RosaryBeads.tsx` | Chapelet SVG interactif (Pater, 10 Ave, médaille = Gloria, croix) |

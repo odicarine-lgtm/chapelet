@@ -1,6 +1,21 @@
 export type Lang = 'fr' | 'la';
 
-export type PrayerId = 'pater' | 'ave' | 'gloria' | 'fatima' | 'salve' | 'benediction';
+export type PrayerId =
+  | 'pater'
+  | 'ave'
+  | 'gloria'
+  | 'fatima'
+  | 'salve'
+  | 'benediction'
+  // Chapelet de la Divine Miséricorde
+  | 'signeCroix'
+  | 'sangEau'
+  | 'credo'
+  | 'pereEternel'
+  | 'parSaPassion'
+  | 'dieuSaint'
+  | 'finaleMisericorde'
+  | 'jesusConfiance';
 
 interface Prayer {
   title: Record<Lang, string>;
@@ -50,11 +65,61 @@ export const PRAYERS: Record<PrayerId, Prayer> = {
       la: 'Per intercessionem beatae Mariae semper Virginis, benedicat nos omnipotens Deus, Pater, et Filius, et Spiritus Sanctus. Amen.',
     },
   },
+  signeCroix: {
+    title: { fr: 'Signe de croix', la: 'Signum Crucis' },
+    text: {
+      fr: 'Au nom du Père, et du Fils, et du Saint-Esprit. Amen.',
+      la: 'In nomine Patris, et Filii, et Spiritus Sancti. Amen.',
+    },
+  },
+  sangEau: {
+    title: { fr: 'Ô Sang et Eau', la: 'O Sanguis et Aqua' },
+    text: {
+      fr: 'Ô Sang et Eau qui avez jailli du Cœur de Jésus comme source de miséricorde pour nous, j’ai confiance en Vous !',
+      la: 'O Sanguis et Aqua, qui ex Corde Iesu ut fons misericordiae pro nobis emanasti, confido in te.',
+    },
+  },
+  credo: {
+    title: { fr: 'Je crois en Dieu', la: 'Credo' },
+    text: {
+      fr: 'Je crois en Dieu, le Père tout-puissant, créateur du ciel et de la terre. Et en Jésus-Christ, son Fils unique, notre Seigneur, qui a été conçu du Saint-Esprit, est né de la Vierge Marie, a souffert sous Ponce Pilate, a été crucifié, est mort et a été enseveli, est descendu aux enfers, le troisième jour est ressuscité des morts, est monté aux cieux, est assis à la droite de Dieu le Père tout-puissant, d’où il viendra juger les vivants et les morts. Je crois en l’Esprit-Saint, à la sainte Église catholique, à la communion des saints, à la rémission des péchés, à la résurrection de la chair, à la vie éternelle. Amen.',
+      la: 'Credo in Deum Patrem omnipotentem, Creatorem caeli et terrae. Et in Iesum Christum, Filium eius unicum, Dominum nostrum, qui conceptus est de Spiritu Sancto, natus ex Maria Virgine, passus sub Pontio Pilato, crucifixus, mortuus, et sepultus, descendit ad inferos, tertia die resurrexit a mortuis, ascendit ad caelos, sedet ad dexteram Dei Patris omnipotentis, inde venturus est iudicare vivos et mortuos. Credo in Spiritum Sanctum, sanctam Ecclesiam catholicam, sanctorum communionem, remissionem peccatorum, carnis resurrectionem, vitam aeternam. Amen.',
+    },
+  },
+  pereEternel: {
+    title: { fr: 'Père Éternel', la: 'Pater aeterne' },
+    text: {
+      fr: 'Père Éternel, je T’offre le Corps et le Sang, l’Âme et la Divinité de Ton Fils bien-aimé, notre Seigneur Jésus-Christ, en réparation de nos péchés et de ceux du monde entier.',
+      la: 'Pater aeterne, offero tibi Corpus et Sanguinem, Animam et Divinitatem dilectissimi Filii tui, Domini nostri Iesu Christi, in propitiationem pro peccatis nostris et totius mundi.',
+    },
+  },
+  parSaPassion: {
+    title: { fr: 'Par sa douloureuse Passion', la: 'Pro dolorosa passione' },
+    text: {
+      fr: 'Par Sa douloureuse Passion, sois miséricordieux pour nous et pour le monde entier.',
+      la: 'Pro dolorosa eius passione, miserere nobis et totius mundi.',
+    },
+  },
+  dieuSaint: {
+    title: { fr: 'Dieu Saint', la: 'Sanctus Deus' },
+    text: {
+      fr: 'Dieu Saint, Dieu Fort, Dieu Immortel, prends pitié de nous et du monde entier.',
+      la: 'Sanctus Deus, Sanctus Fortis, Sanctus Immortalis, miserere nobis et totius mundi.',
+    },
+  },
+  finaleMisericorde: {
+    title: { fr: 'Prière finale', la: 'Oratio conclusiva' },
+    text: {
+      fr: 'Ô Dieu éternel, dont la miséricorde est insondable et le trésor de compassion inépuisable, pose sur nous un regard favorable et multiplie en nous Ta miséricorde, afin que dans les moments difficiles nous ne désespérions pas et ne perdions pas courage, mais que nous nous soumettions avec une grande confiance à Ta sainte volonté, qui est l’Amour et la Miséricorde même. Amen.',
+      la: 'Aeterne Deus, cuius misericordia est infinita et thesaurus miserationis inexhaustus, respice propitius in nos et auge in nobis misericordiam tuam, ut in rebus difficilibus non desperemus neque animo deficiamus, sed cum magna fiducia voluntati tuae sanctae, quae est ipse Amor et Misericordia, nos subiciamus. Amen.',
+    },
+  },
+  jesusConfiance: {
+    title: { fr: 'Jésus, j’ai confiance en Toi', la: 'Iesu, in te confido' },
+    text: {
+      fr: 'Jésus, j’ai confiance en Toi !',
+      la: 'Iesu, in te confido.',
+    },
+  },
 };
 
-/** Numéro de grain (0 à 11) → prières à réciter. */
-export function prayersForStep(step: number): PrayerId[] {
-  if (step === 0) return ['pater'];
-  if (step === 11) return ['gloria', 'fatima'];
-  return ['ave'];
-}

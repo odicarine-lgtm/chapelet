@@ -1,11 +1,12 @@
 import { Flame, Layers, RotateCcw, Sparkles } from 'lucide-react';
-import { PRAYERS, type Lang } from '../data/prayers';
-import type { MysterySet } from '../data/mysteries';
+import { PRAYERS, type Lang, type PrayerId } from '../data/prayers';
 import { Modal } from './Modal';
 
 interface Props {
   open: boolean;
-  set: MysterySet;
+  name: string;
+  latin: string;
+  closing: PrayerId[];
   lang: Lang;
   streak: number;
   total: number;
@@ -15,7 +16,7 @@ interface Props {
   onClose: () => void;
 }
 
-export function CompletionScreen({ open, set, lang, streak, total, intention, onRestart, onAnother, onClose }: Props) {
+export function CompletionScreen({ open, name, latin, closing, lang, streak, total, intention, onRestart, onAnother, onClose }: Props) {
   return (
     <Modal open={open} onClose={onClose} title="Chapelet terminé" hideTitle wide>
       <div className="relative overflow-hidden text-center" role="status">
@@ -26,7 +27,7 @@ export function CompletionScreen({ open, set, lang, streak, total, intention, on
           Chapelet terminé avec succès
         </p>
         <p className="relative mt-2 font-serif text-lg italic text-night/70 dark:text-ivory/70">
-          {set.name} — {set.latin}
+          {name} — {latin}
         </p>
         {intention && (
           <p className="relative mx-auto mt-2 max-w-md text-sm text-night/70 dark:text-ivory/70">
@@ -44,10 +45,12 @@ export function CompletionScreen({ open, set, lang, streak, total, intention, on
         </div>
 
         <section className="relative mt-6 rounded-2xl bg-parchment/70 p-5 text-left dark:bg-night/60">
-          <h3 className="eyebrow">{PRAYERS.salve.title[lang]}</h3>
-          <p className="mt-2 whitespace-pre-line font-serif text-lg leading-relaxed">{PRAYERS.salve.text[lang]}</p>
-          <h3 className="eyebrow mt-5">{PRAYERS.benediction.title[lang]}</h3>
-          <p className="mt-2 font-serif text-lg italic leading-relaxed">{PRAYERS.benediction.text[lang]}</p>
+          {closing.map((id, i) => (
+            <div key={id} className={i > 0 ? 'mt-5' : ''}>
+              <h3 className="eyebrow">{PRAYERS[id].title[lang]}</h3>
+              <p className={`mt-2 whitespace-pre-line font-serif text-lg leading-relaxed ${i === closing.length - 1 ? 'italic' : ''}`}>{PRAYERS[id].text[lang]}</p>
+            </div>
+          ))}
           <p className="mt-3 text-center text-2xl text-gold" aria-hidden="true">✠</p>
         </section>
 
